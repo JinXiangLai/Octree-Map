@@ -172,7 +172,7 @@ int Octree::FindCurrentPointBelong2WhichChildNode(const Eigen::Vector3f &p, std:
 }
 
 
-// 实现动态扩增的八叉树，只在有地图点的位置添加leaf，而不需要构建满八叉树
+// 实现动态扩增的八叉树，只在有地图点的位置生成leaf，而不需要构建满八叉树
 bool Octree::AddOnePoint(const Eigen::Vector3f &p) {
     return AddOnePoint(p, root_);
 }

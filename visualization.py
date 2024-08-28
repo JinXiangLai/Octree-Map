@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # point_cloud_file = './build/point_cloud_full_octree.csv'
-point_cloud_file = './build/point_cloud_dynamic_create_octree.csv'
 # point_cloud_file = './build/point_cloud_2_make_octree.csv'
+point_cloud_file = './build/point_cloud_dynamic_create_octree.csv'
 
 # points是一个Nx3的数组，其中N是点的数量，3代表x, y, z坐标
 points = []
