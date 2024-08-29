@@ -7,9 +7,11 @@
 
 #include <Eigen/Dense>
 
+namespace octree {
 
 struct MapPoint {
     MapPoint(const float x, const float y, const float z);
+    MapPoint(const Eigen::Vector3f &p);
     Eigen::Vector3f p_{0, 0, 0};
 };
 
@@ -37,16 +39,20 @@ public:
     void CreateOctrteeFull();
     std::shared_ptr<Cube> LeafPointBelong2(const MapPoint &p);
     bool AddOnePoint(const Eigen::Vector3f &p);
+    void TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result);
 
+    std::ofstream debugFile_;
 private:
     void CreateOctrteeFull(std::shared_ptr<Cube> node);
     std::shared_ptr<Cube> LeafPointBelong2(const Eigen::Vector3f &p, std::shared_ptr<Cube> node);
     bool AddOnePoint(const Eigen::Vector3f &p, std::shared_ptr<Cube> node);
     int FindCurrentPointBelong2WhichChildNode(const Eigen::Vector3f &p, std::shared_ptr<Cube> node);
+    void TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result, std::shared_ptr<Cube> node);
 
     std::shared_ptr<Cube> root_;
     float sideLen_ = 1000;
     float resolution_ = 0.05;
     int leafNum_ = 0;
-    std::ofstream debugFile_;
 };
+
+}

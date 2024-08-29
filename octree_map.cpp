@@ -2,9 +2,17 @@
 
 using namespace std;
 
-MapPoint::MapPoint(const float x, const float y, const float z){
+namespace octree {
+
+
+constexpr int kMinPointNumInOneCude = 2;
+
+MapPoint::MapPoint(const float x, const float y, const float z) {
     p_ << x, y, z;
 }
+
+MapPoint::MapPoint(const Eigen::Vector3f &p) : p_(p){}
+
 
 Cube::Cube(const float sideLen, const Eigen::Vector3f &center)
     : sideLen_(sideLen)
@@ -180,7 +188,7 @@ bool Octree::AddOnePoint(const Eigen::Vector3f &p) {
 bool Octree::AddOnePoint(const Eigen::Vector3f &p, shared_ptr<Cube> node) {
     // 递归终止条件
     if(node->sideLen_ <= resolution_) {
-        debugFile_ << node->center_.x() << " " << node->center_.y() << " " << node->center_.z() << endl;
+        node->points.push_back(make_shared<MapPoint>(p));
         return true;
     }
 
@@ -227,10 +235,32 @@ shared_ptr<Cube> Octree::LeafPointBelong2(const Eigen::Vector3f &p, shared_ptr<C
     return LeafPointBelong2(p, cubes[id]);
 }
 
+void Octree::TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result, std::shared_ptr<Cube> node) {
+    if(!node) {
+        return;
+    }
+    if(node->sideLen_ <= resolution_) {
+        result.push_back(node);
+        return;
+    }
+
+    for(int i = 0; i < 8; ++i) {
+        TraverseAllLeafNode(result, node->cube[i]);
+    }
+}
+
+void Octree::TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result) {
+    TraverseAllLeafNode(result, root_);
+}
+
+
 Octree::~Octree() {
     debugFile_.close();
 }
 
+}
+
+using namespace octree;
 int main(int argc, char** argv) {
     if (argc != 6) {
         cerr << endl 
@@ -267,6 +297,16 @@ int main(int argc, char** argv) {
             ++count;
         }
         cout << "Add to octree map point num: " << count << endl;
+        std::vector<std::shared_ptr<Cube> > result;
+        octree.TraverseAllLeafNode(result);
+        cout << "map point num after octree filtered: " << result.size()
+             << " & culling point num: " << (count - result.size()) << endl;
+        for(int i = 0; i < result.size(); ++i) {
+            shared_ptr<Cube> leafNode = result[i];
+            if(leafNode->points.size() >= kMinPointNumInOneCude) {
+                octree.debugFile_ << leafNode->center_.x() << " " << leafNode->center_.y() << " " << leafNode->center_.z() << endl; 
+            }
+        }
     }
 
     // 寻找地图点所在位置
