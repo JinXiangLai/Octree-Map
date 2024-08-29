@@ -40,6 +40,7 @@ public:
     std::shared_ptr<Cube> LeafPointBelong2(const MapPoint &p);
     bool AddOnePoint(const Eigen::Vector3f &p);
     void TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result);
+    std::vector<MapPoint> GetLocalMap(const Eigen::Vector3f &center, const float radius);
 
     std::ofstream debugFile_;
 private:
@@ -48,6 +49,8 @@ private:
     bool AddOnePoint(const Eigen::Vector3f &p, std::shared_ptr<Cube> node);
     int FindCurrentPointBelong2WhichChildNode(const Eigen::Vector3f &p, std::shared_ptr<Cube> node);
     void TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result, std::shared_ptr<Cube> node);
+    void GetLocalMap(const Eigen::Vector3f &center, const float radius, std::shared_ptr<Cube> node, 
+                        std::vector<std::shared_ptr<Cube> > &result);
 
     std::shared_ptr<Cube> root_;
     float sideLen_ = 1000;

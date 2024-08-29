@@ -93,7 +93,7 @@ void Cube::CreateOneCube(const int id) {
 
 
 
-Octree::Octree(const float sideLen, const float resolution, const Eigen::Vector3f &center, const std::string &fileName)
+Octree::Octree(const float sideLen, const float resolution, const Eigen::Vector3f &center, const string &fileName)
     : sideLen_(sideLen)
     , resolution_(resolution)
     {
@@ -119,6 +119,7 @@ void Octree::CreateOctrteeFull(shared_ptr<Cube> node) {
     // 最终八叉树的分辨率一般不会严格等于预设分辨率
     if(node->sideLen_ <= resolution_) {
         ++leafNum_;
+        node->points.push_back(make_shared<MapPoint>(node->center_));
         debugFile_ << node->center_.x() << " " << node->center_.y() << " " << node->center_.z() << endl;
         return;
     }
@@ -130,7 +131,7 @@ void Octree::CreateOctrteeFull(shared_ptr<Cube> node) {
     }
 }
 
-int Octree::FindCurrentPointBelong2WhichChildNode(const Eigen::Vector3f &p, std::shared_ptr<Cube> node){
+int Octree::FindCurrentPointBelong2WhichChildNode(const Eigen::Vector3f &p, shared_ptr<Cube> node){
     const Eigen::Vector3f &ct = node->center_;
     int id = INT_MAX;
     if(p.x() <= ct.x()) {
@@ -235,7 +236,7 @@ shared_ptr<Cube> Octree::LeafPointBelong2(const Eigen::Vector3f &p, shared_ptr<C
     return LeafPointBelong2(p, cubes[id]);
 }
 
-void Octree::TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result, std::shared_ptr<Cube> node) {
+void Octree::TraverseAllLeafNode(vector<shared_ptr<Cube> > &result, shared_ptr<Cube> node) {
     if(!node) {
         return;
     }
@@ -249,10 +250,67 @@ void Octree::TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result, st
     }
 }
 
-void Octree::TraverseAllLeafNode(std::vector<std::shared_ptr<Cube> > &result) {
+void Octree::TraverseAllLeafNode(vector<shared_ptr<Cube> > &result) {
     TraverseAllLeafNode(result, root_);
 }
 
+void Octree::GetLocalMap(const Eigen::Vector3f &center, const float radius, shared_ptr<Cube> node, 
+                            vector<shared_ptr<Cube> > &result) {
+    if(!node) {
+        return;
+    }
+
+    // 判断结点范围是否囊括所需地图范围
+    auto CrossRange = [&center, &radius] (const float sideLen, const Eigen::Vector3f &ctCube) -> bool {
+        const float centerDist = (ctCube - center).norm();
+        // “立方体与球”的相交条件:
+        // s = 0.5 * sideLen
+        // d = √{(√2 * s)^2 + s^2} = √3s
+        return centerDist <= 0.87 * sideLen + radius;
+    };
+    auto InRange = [&center, &radius] (const float sideLen, const Eigen::Vector3f &ctCube) -> bool {
+        const float centerDist = (ctCube - center).norm();
+        // 包含条件
+        return centerDist + radius <= 0.87 * sideLen;
+    };
+
+    const bool nodeCrossWithScan = CrossRange(node->sideLen_, node->center_);
+    if(nodeCrossWithScan && (node->sideLen_ * 0.5 < radius || node->sideLen_ <= resolution_)) {
+        vector<shared_ptr<Cube> > partLeaf;
+        TraverseAllLeafNode(partLeaf, node);
+        result.insert(result.end(), partLeaf.begin(), partLeaf.end());
+    } else {
+        const vector<shared_ptr<Cube> > &cubes = node->cube;
+        for(int i = 0; i < 8; ++i) {
+            if(!cubes[i]) {
+                continue;
+            }
+            // 只遍历与scan交叉或包含scan的cude，实现了剪枝以加快检索速度
+            if(CrossRange(cubes[i]->sideLen_, cubes[i]->center_) || 
+                InRange(cubes[i]->sideLen_, cubes[i]->center_)) {
+                GetLocalMap(center, radius, cubes[i], result);
+            } 
+        }
+    }
+}
+
+// 搜寻所需最小局部地图，如用于scan2map ICP时
+// 当点云地图非常大，如囊括整个广州市时:
+// step1: 找到边长小于scan radius并与scan交叉的所有cubes
+// step2: 遍历上述所有cube内的点云，只使用与scan中心在阈值范围内的点
+std::vector<MapPoint> Octree::GetLocalMap(const Eigen::Vector3f &center, const float radius) {
+    vector<shared_ptr<Cube> > leaf;
+    
+    GetLocalMap(center, radius, root_, leaf);
+    
+    std::vector<MapPoint> res;
+    for(shared_ptr<Cube> node : leaf) {
+        for(std::shared_ptr<MapPoint> p : node->points) {
+            res.push_back(*p);
+        }
+    }
+    return res;
+}
 
 Octree::~Octree() {
     debugFile_.close();
@@ -271,14 +329,42 @@ int main(int argc, char** argv) {
     const float len = stof(argv[1]);
     const float res = stof(argv[2]);
     const Eigen::Vector3f ct{0, 0, 0};
-    // const string debugPointCloudFileName = "point_cloud_full_octree.csv";
-    const string debugPointCloudFileName = "point_cloud_dynamic_create_octree.csv";
+
+    bool createFullOctree = true;
+    const string debugPointCloudFileName = "point_cloud_full_octree.csv";
+    // const string debugPointCloudFileName = "point_cloud_dynamic_create_octree.csv";
     Octree octree(len, res, ct, debugPointCloudFileName);
     
-    bool createFullOctree = false;
     if(createFullOctree) {
         // 创建满八叉树
         octree.CreateOctrteeFull();
+        
+        // 创建scan点云
+        const Eigen::Vector3f ct {0., 0., 0.};
+        const float radius = 0.1;
+        ofstream scanCloud;
+        scanCloud.open("scan_cloud.csv", ios::out);
+        scanCloud << ct[0] << " " << ct[1] << " " << ct[2] + radius << endl;
+        scanCloud << ct[0] << " " << ct[1] << " " << ct[2] - radius << endl;
+        scanCloud << ct[0] << " " << ct[1] + radius << " " << ct[2] << endl;
+        scanCloud << ct[0] << " " << ct[1] - radius << " " << ct[2] << endl;
+        scanCloud << ct[0] + radius << " " << ct[1] << " " << ct[2] << endl;
+        scanCloud << ct[0] - radius << " " << ct[1] << " " << ct[2] << endl;
+        scanCloud.close();
+
+        // 再从八叉树中搜寻与scan匹配所需局部最小子图
+        std::vector<MapPoint> ps = octree.GetLocalMap(ct, radius);
+        cout << "get local map size: " << ps.size() << endl;
+        ofstream localMap;
+        localMap.open("local_map.csv", ios::out);
+        for(auto &p : ps) {
+            // 只保留与scan中心距离在阈值范围内的点
+            if((p.p_ - ct).norm() < radius + res) {
+                localMap << p.p_.x() << " " << p.p_.y() << " " << p.p_.z() << endl;
+            }  
+        }
+        localMap.close();
+
     } else {
         // 读入点云数据文件，逐个创建八叉树结点
         int count = 0;
@@ -297,7 +383,7 @@ int main(int argc, char** argv) {
             ++count;
         }
         cout << "Add to octree map point num: " << count << endl;
-        std::vector<std::shared_ptr<Cube> > result;
+        vector<shared_ptr<Cube> > result;
         octree.TraverseAllLeafNode(result);
         cout << "map point num after octree filtered: " << result.size()
              << " & culling point num: " << (count - result.size()) << endl;
